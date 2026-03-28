@@ -104,6 +104,20 @@ def download_all() -> dict[str, bool]:
         "coordonnées communes"
     )
 
+    # Départements
+    results["departements"] = download_json(
+        URLS["departements"],
+        OUTPUT_FILES["departements"],
+        "départements"
+    )
+
+    # Régions
+    results["regions"] = download_json(
+        URLS["regions"],
+        OUTPUT_FILES["regions"],
+        "régions"
+    )
+
     # Ajouter les arrondissements au fichier geo
     if results["communes_geo"]:
         add_arrondissements_to_geo(OUTPUT_FILES["communes_geo"])

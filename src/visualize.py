@@ -50,6 +50,7 @@ def compute_pie_data(df_filtered: pd.DataFrame, by_population: bool = False) -> 
 def create_hover_text(row: pd.Series) -> str:
     """Crée le texte de survol pour un point."""
     return (f"<b>{row['nom']}</b><br>"
+            f"{row['departement']} ({row['region']})<br>"
             f"Maire: {row['maire']}<br>"
             f"Nuance: {row['nuance']} ({row['bloc']})<br>"
             f"Population: {row['population']:,}<br>"
@@ -134,6 +135,10 @@ def create_visualization(df: pd.DataFrame) -> go.Figure:
     tours_list = ["Tous", "1er tour", "2nd tour"]
     tailles_list = ["Toutes", "Petites (< 5k)", "Moyennes (5k-50k)", "Grandes (> 50k)"]
 
+    # Régions et départements triés
+    regions_list = ["Toutes"] + sorted(df["region"].unique().tolist())
+    departements_list = ["Tous"] + sorted(df["departement"].unique().tolist())
+
     def create_filter_args(mask):
         """Crée les arguments pour mettre à jour les 3 traces."""
         df_filtered = df.loc[mask]
@@ -152,7 +157,8 @@ def create_visualization(df: pd.DataFrame) -> go.Figure:
                 "lat": [df_filtered["lat"].tolist(), None, None],
                 "lon": [df_filtered["lon"].tolist(), None, None],
                 "marker.size": [filtered_sizes.tolist(), None, None],
-                "marker.color": [df_filtered["couleur"].tolist(), pie_c_colors, pie_p_colors],
+                "marker.color": [df_filtered["couleur"].tolist(), None, None],
+                "marker.colors": [None, pie_c_colors, pie_p_colors],
                 "text": [df_filtered.apply(create_hover_text, axis=1).tolist(), None, None],
                 "labels": [None, pie_c_labels, pie_p_labels],
                 "values": [None, pie_c_values, pie_p_values],
@@ -191,6 +197,18 @@ def create_visualization(df: pd.DataFrame) -> go.Figure:
             mask = df["population"] >= 50000
         taille_buttons.append(dict(args=create_filter_args(mask), label=taille, method="restyle"))
 
+    # Boutons Région
+    region_buttons = []
+    for region in regions_list:
+        mask = pd.Series([True] * len(df), index=df.index) if region == "Toutes" else df["region"] == region
+        region_buttons.append(dict(args=create_filter_args(mask), label=region, method="restyle"))
+
+    # Boutons Département
+    dept_buttons = []
+    for dept in departements_list:
+        mask = pd.Series([True] * len(df), index=df.index) if dept == "Tous" else df["departement"] == dept
+        dept_buttons.append(dict(args=create_filter_args(mask), label=dept, method="restyle"))
+
     # === LAYOUT ===
     fig.update_layout(
         title=dict(
@@ -210,25 +228,37 @@ def create_visualization(df: pd.DataFrame) -> go.Figure:
         updatemenus=[
             dict(
                 buttons=bloc_buttons, direction="down", showactive=True, active=0,
-                x=0.10, xanchor="left", y=0.99, yanchor="top",
-                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=11),
+                x=0.07, xanchor="left", y=0.99, yanchor="top",
+                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=10),
             ),
             dict(
                 buttons=tour_buttons, direction="down", showactive=True, active=0,
-                x=0.27, xanchor="left", y=0.99, yanchor="top",
-                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=11),
+                x=0.195, xanchor="left", y=0.99, yanchor="top",
+                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=10),
             ),
             dict(
                 buttons=taille_buttons, direction="down", showactive=True, active=0,
-                x=0.42, xanchor="left", y=0.99, yanchor="top",
-                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=11),
+                x=0.30, xanchor="left", y=0.99, yanchor="top",
+                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=10),
+            ),
+            dict(
+                buttons=region_buttons, direction="down", showactive=True, active=0,
+                x=0.44, xanchor="left", y=0.99, yanchor="top",
+                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=10),
+            ),
+            dict(
+                buttons=dept_buttons, direction="down", showactive=True, active=0,
+                x=0.58, xanchor="left", y=0.99, yanchor="top",
+                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=10),
             ),
         ],
 
         annotations=[
-            dict(text="<b>Bloc:</b>", x=0.01, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=12)),
-            dict(text="<b>Tour:</b>", x=0.20, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=12)),
-            dict(text="<b>Taille:</b>", x=0.36, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=12)),
+            dict(text="<b>Bloc</b>", x=0.0, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=10)),
+            dict(text="<b>Tour</b>", x=0.14, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=10)),
+            dict(text="<b>Taille</b>", x=0.255, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=10)),
+            dict(text="<b>Région</b>", x=0.385, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=10)),
+            dict(text="<b>Dépt.</b>", x=0.53, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=10)),
         ],
 
         margin=dict(l=10, r=10, t=50, b=10),
@@ -263,17 +293,24 @@ def save_html(fig: go.Figure, output_path: Path | None = None) -> Path:
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Élections Municipales 2026 - Carte interactive</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {{
             darkMode: 'class',
             theme: {{
                 extend: {{
+                    fontFamily: {{
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    }},
                     colors: {{
                         border: "hsl(var(--border))",
                         background: "hsl(var(--background))",
                         foreground: "hsl(var(--foreground))",
                         card: "hsl(var(--card))",
                         muted: "hsl(var(--muted))",
+                        accent: "hsl(var(--accent))",
                     }}
                 }}
             }}
@@ -281,131 +318,167 @@ def save_html(fig: go.Figure, output_path: Path | None = None) -> Path:
     </script>
     <style>
         :root {{
-            --background: 0 0% 100%;
-            --foreground: 222.2 84% 4.9%;
+            --background: 0 0% 98%;
+            --foreground: 240 10% 3.9%;
             --card: 0 0% 100%;
-            --border: 214.3 31.8% 91.4%;
-            --muted: 210 40% 96%;
+            --border: 240 5.9% 90%;
+            --muted: 240 4.8% 95.9%;
+            --accent: 240 4.8% 95.9%;
         }}
         .dark {{
-            --background: 222.2 84% 4.9%;
-            --foreground: 210 40% 98%;
-            --card: 222.2 84% 4.9%;
-            --border: 217.2 32.6% 17.5%;
-            --muted: 217.2 32.6% 17.5%;
+            --background: 240 10% 3.9%;
+            --foreground: 0 0% 98%;
+            --card: 240 10% 5.9%;
+            --border: 240 3.7% 15.9%;
+            --muted: 240 3.7% 15.9%;
+            --accent: 240 3.7% 20%;
         }}
-        .bw .js-plotly-plot .scattermapbox .point {{
-            filter: grayscale(100%) !important;
+        body {{ font-family: 'Inter', system-ui, sans-serif; }}
+        .glass {{
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }}
-        .bw table tr:first-child {{
-            filter: grayscale(100%) !important;
+        .dark .glass {{
+            background: rgba(15, 15, 20, 0.8);
         }}
-        .bw .slice {{
-            filter: grayscale(100%) !important;
+        .gradient-border {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1px;
+        }}
+        .gradient-text {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }}
     </style>
 </head>
 <body class="bg-background text-foreground min-h-screen">
     <!-- Header -->
-    <header class="border-b border-border bg-card">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-            <h1 class="text-xl font-semibold tracking-tight">Élections Municipales 2026</h1>
+    <header class="glass sticky top-0 z-50 border-b border-border/50">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <button id="bwToggle" onclick="toggleBW()" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-border bg-background hover:bg-muted h-9 px-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 0 0 20z"/></svg>
-                    Noir & Blanc
-                </button>
-                <button onclick="toggleDark()" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-border bg-background hover:bg-muted h-9 w-9">
-                    <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
-                    <svg id="moonIcon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
-                </button>
+                <div class="w-10 h-10 rounded-xl gradient-border flex items-center justify-center">
+                    <div class="w-full h-full rounded-xl bg-card flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="url(#grad)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#667eea"/><stop offset="100%" style="stop-color:#764ba2"/></linearGradient></defs>
+                            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+                        </svg>
+                    </div>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">Municipales <span class="gradient-text">2026</span></h1>
+                    <p class="text-xs text-muted-foreground">Carte interactive des maires élus</p>
+                </div>
             </div>
+            <button onclick="toggleDark()" class="group relative inline-flex items-center justify-center rounded-xl text-sm font-medium transition-all duration-200 border border-border/50 bg-card hover:bg-accent h-10 w-10 shadow-sm hover:shadow-md">
+                <svg id="sunIcon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="transition-transform group-hover:rotate-45"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                <svg id="moonIcon" class="hidden transition-transform group-hover:-rotate-12" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+            </button>
         </div>
     </header>
 
     <!-- Main content -->
-    <main class="max-w-7xl mx-auto">
-        <div id="plotly-container" class="w-full">
-            {plotly_html}
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        <!-- Map container with shadow -->
+        <div class="rounded-2xl overflow-hidden shadow-xl border border-border/50 bg-card">
+            <div id="plotly-container" class="w-full">
+                {plotly_html}
+            </div>
         </div>
 
         <!-- Legend -->
-        <div class="px-4 py-6 border-t border-border">
-            <h2 class="text-lg font-semibold text-center mb-4">Correspondance Nuances → Blocs politiques</h2>
+        <div class="mt-8 mb-6">
+            <div class="flex items-center gap-3 mb-5">
+                <div class="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent"></div>
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Légende des nuances</h2>
+                <div class="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent"></div>
+            </div>
+
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 text-xs">
-                <div class="rounded-lg border border-border overflow-hidden">
-                    <div class="px-3 py-2 font-medium text-white" style="background:#BB0000">Extrême Gauche</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LEXG - Extrême Gauche</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LFI - France Insoumise</div>
+                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
+                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #BB0000 0%, #8B0000 100%)">Extrême Gauche</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LEXG · Extrême Gauche</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LFI · France Insoumise</div>
                 </div>
-                <div class="rounded-lg border border-border overflow-hidden">
-                    <div class="px-3 py-2 font-medium text-white" style="background:#FF6B6B">Gauche</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LCOM - Communiste</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LSOC - Socialiste</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LDVG - Divers Gauche</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LUG - Union Gauche</div>
+                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
+                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #FF6B6B 0%, #ee5a5a 100%)">Gauche</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LCOM · Communiste</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LSOC · Socialiste</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LDVG · Divers Gauche</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUG · Union Gauche</div>
                 </div>
-                <div class="rounded-lg border border-border overflow-hidden">
-                    <div class="px-3 py-2 font-medium text-white" style="background:#2ECC71">Écologistes</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LECO - Écologiste</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LVEC - Verts</div>
+                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
+                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #2ECC71 0%, #27ae60 100%)">Écologistes</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LECO · Écologiste</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LVEC · Verts</div>
                 </div>
-                <div class="rounded-lg border border-border overflow-hidden">
-                    <div class="px-3 py-2 font-medium text-white" style="background:#F39C12">Centre</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LDVC - Divers Centre</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LHOR - Horizons</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LMDM - MoDem</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LREN - Renaissance</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LUC - Union Centre</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LUDI - UDI</div>
+                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
+                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #F39C12 0%, #d68910 100%)">Centre</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LDVC · Divers Centre</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LHOR · Horizons</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LMDM · MoDem</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LREN · Renaissance</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUC · Union Centre</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUDI · UDI</div>
                 </div>
-                <div class="rounded-lg border border-border overflow-hidden">
-                    <div class="px-3 py-2 font-medium text-white" style="background:#3498DB">Droite</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LDVD - Divers Droite</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LLR - Les Républicains</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LUD - Union Droite</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LUDR - Union DR/Centre</div>
+                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
+                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #3498DB 0%, #2980b9 100%)">Droite</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LDVD · Divers Droite</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LLR · Les Républicains</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUD · Union Droite</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUDR · Union DR/Centre</div>
                 </div>
-                <div class="rounded-lg border border-border overflow-hidden">
-                    <div class="px-3 py-2 font-medium text-white" style="background:#1A1A2E">Extrême Droite</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LEXD - Extrême Droite</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LRN - Rass. National</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LREC - Reconquête</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LUXD - Union Ext. DR</div>
+                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
+                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #1A1A2E 0%, #0f0f1a 100%)">Extrême Droite</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LEXD · Extrême Droite</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LRN · Rass. National</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LREC · Reconquête</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUXD · Union Ext. DR</div>
                 </div>
-                <div class="rounded-lg border border-border overflow-hidden">
-                    <div class="px-3 py-2 font-medium text-white" style="background:#9B59B6">Régionalistes</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LREG - Régionaliste</div>
+                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
+                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #9B59B6 0%, #8e44ad 100%)">Régionalistes</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LREG · Régionaliste</div>
                 </div>
-                <div class="rounded-lg border border-border overflow-hidden">
-                    <div class="px-3 py-2 font-medium text-white" style="background:#95A5A6">Divers</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">DIV - Sans étiquette</div>
-                    <div class="px-3 py-1.5 bg-card border-t border-border">LDIV - Liste Divers</div>
+                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
+                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #95A5A6 0%, #7f8c8d 100%)">Divers</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">DIV · Sans étiquette</div>
+                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LDIV · Liste Divers</div>
                 </div>
             </div>
 
-            <div class="mt-4 flex items-center justify-center gap-6 text-sm text-muted-foreground">
-                <span class="flex items-center gap-2">
-                    <span class="inline-block w-2 h-2 rounded-full bg-gray-400"></span>
-                    &lt;5k hab.
-                </span>
-                <span class="flex items-center gap-2">
-                    <span class="inline-block w-3 h-3 rounded-full bg-gray-400"></span>
-                    5k-50k hab.
-                </span>
-                <span class="flex items-center gap-2">
-                    <span class="inline-block w-4 h-4 rounded-full bg-gray-400"></span>
-                    &gt;50k hab.
-                </span>
+            <!-- Size legend -->
+            <div class="mt-6 flex items-center justify-center gap-8 text-sm">
+                <div class="flex items-center gap-6 px-6 py-3 rounded-full bg-muted/50 border border-border/50">
+                    <span class="flex items-center gap-2 text-muted-foreground">
+                        <span class="inline-block w-2 h-2 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 shadow-sm"></span>
+                        &lt;5k hab.
+                    </span>
+                    <span class="flex items-center gap-2 text-muted-foreground">
+                        <span class="inline-block w-3 h-3 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 shadow-sm"></span>
+                        5k-50k hab.
+                    </span>
+                    <span class="flex items-center gap-2 text-muted-foreground">
+                        <span class="inline-block w-4 h-4 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 shadow-sm"></span>
+                        &gt;50k hab.
+                    </span>
+                </div>
             </div>
         </div>
     </main>
 
     <!-- Footer -->
-    <footer class="border-t border-border py-4">
-        <div class="max-w-7xl mx-auto px-4 text-center text-sm text-muted-foreground">
-            Source: <a href="https://www.data.gouv.fr/datasets/elections-municipales-2026-resultats-du-premier-tour" class="underline hover:text-foreground">data.gouv.fr</a>
-            · Données du 28 mars 2026
+    <footer class="border-t border-border/50 py-6 mt-8">
+        <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
+            <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg>
+                Source: <a href="https://www.data.gouv.fr/datasets/elections-municipales-2026-resultats-du-premier-tour" class="underline hover:text-foreground transition-colors">data.gouv.fr</a>
+            </div>
+            <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+                Données du 28 mars 2026
+            </div>
         </div>
     </footer>
 
@@ -414,17 +487,6 @@ def save_html(fig: go.Figure, output_path: Path | None = None) -> Path:
             document.documentElement.classList.toggle('dark');
             document.getElementById('sunIcon').classList.toggle('hidden');
             document.getElementById('moonIcon').classList.toggle('hidden');
-        }}
-        function toggleBW() {{
-            document.body.classList.toggle('bw');
-            const btn = document.getElementById('bwToggle');
-            if (document.body.classList.contains('bw')) {{
-                btn.classList.add('bg-foreground', 'text-background');
-                btn.classList.remove('bg-background');
-            }} else {{
-                btn.classList.remove('bg-foreground', 'text-background');
-                btn.classList.add('bg-background');
-            }}
         }}
     </script>
 </body>

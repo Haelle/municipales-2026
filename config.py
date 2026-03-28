@@ -21,8 +21,12 @@ URLS = {
     "arrondissements_t2": "https://www.data.gouv.fr/api/1/datasets/r/879a6c8e-2a59-419a-8e86-587e635f02d7",
     # Population municipale (INSEE via data.gouv.fr)
     "population": "https://www.data.gouv.fr/api/1/datasets/r/be303501-5c46-48a1-87b4-3d198423ff49",
-    # Coordonnées des communes (geo.api.gouv.fr)
-    "communes_geo": "https://geo.api.gouv.fr/communes?fields=code,nom,centre&format=json",
+    # Coordonnées des communes avec département et région (geo.api.gouv.fr)
+    "communes_geo": "https://geo.api.gouv.fr/communes?fields=code,nom,centre,codeDepartement,codeRegion&format=json",
+    # Liste des départements
+    "departements": "https://geo.api.gouv.fr/departements?fields=code,nom,codeRegion",
+    # Liste des régions
+    "regions": "https://geo.api.gouv.fr/regions?fields=code,nom",
 }
 
 # Fichiers de sortie
@@ -33,6 +37,8 @@ OUTPUT_FILES = {
     "arrondissements_t2": RAW_DIR / "arrondissements_t2.csv",
     "population": RAW_DIR / "population.xls",
     "communes_geo": RAW_DIR / "communes_geo.json",
+    "departements": RAW_DIR / "departements.json",
+    "regions": RAW_DIR / "regions.json",
     "processed": PROCESSED_DIR / "resultats_complets.csv",
     "html": DOCS_DIR / "index.html",
 }

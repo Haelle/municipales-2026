@@ -114,12 +114,38 @@ def load_communes_geo(path: Path) -> pd.DataFrame | None:
                     "nom": commune.get("nom", ""),
                     "lon": coords[0] if len(coords) > 0 else None,
                     "lat": coords[1] if len(coords) > 1 else None,
+                    "code_departement": commune.get("codeDepartement", ""),
+                    "code_region": commune.get("codeRegion", ""),
                 })
 
         return pd.DataFrame(records)
     except Exception as e:
         print(f"  Erreur lecture {path}: {e}")
         return None
+
+
+def load_departements(path: Path) -> dict[str, str]:
+    """Charge le mapping code département -> nom département."""
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {d["code"]: d["nom"] for d in data}
+    except Exception:
+        return {}
+
+
+def load_regions(path: Path) -> dict[str, str]:
+    """Charge le mapping code région -> nom région."""
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {r["code"]: r["nom"] for r in data}
+    except Exception:
+        return {}
 
 
 def load_population(path: Path) -> pd.DataFrame | None:
@@ -207,9 +233,19 @@ def process_data() -> pd.DataFrame:
     print("Chargement de la population...")
     pop = load_population(OUTPUT_FILES["population"])
 
+    # Charger les noms de départements et régions
+    print("Chargement des départements et régions...")
+    dept_names = load_departements(OUTPUT_FILES["departements"])
+    region_names = load_regions(OUTPUT_FILES["regions"])
+
     # Joindre avec les coordonnées
     df = results.merge(geo, on="code_insee", how="inner")
     print(f"  Communes avec coordonnées: {len(df)}")
+
+    # Ajouter les noms de département et région
+    df["departement"] = df["code_departement"].map(dept_names).fillna("Inconnu")
+    df["region"] = df["code_region"].map(region_names).fillna("Inconnu")
+    print(f"  Départements: {df['departement'].nunique()}, Régions: {df['region'].nunique()}")
 
     # Joindre avec la population
     if pop is not None:
