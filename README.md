@@ -31,7 +31,7 @@ L'outil permet de :
 
 ### Filtres
 
-- **Bloc politique** : Extrême Gauche, Gauche, Écologistes, Centre, Droite, Extrême Droite, Régionalistes, Divers
+- **Bloc politique** : Extrême Gauche, Gauche, Centre, Droite, Extrême Droite, Divers (selon [référentiel MI](https://www.resultats-elections.interieur.gouv.fr/municipales2026/referentiel.html))
 - **Tour d'élection** : 1er tour / 2nd tour
 - **Taille de commune** : Petites (<5k), Moyennes (5k-50k), Grandes (>50k)
 - **Région** : 18 régions françaises (métropole + DOM-TOM)
@@ -135,16 +135,16 @@ Le dossier `docs/` est configuré pour être servi par GitHub Pages :
 
 ## Mapping des nuances politiques
 
-| Bloc           | Nuances                           | Couleur |
-| -------------- | --------------------------------- | ------- |
-| Extrême Gauche | LEXG, LFI                         | #BB0000 |
-| Gauche         | LCOM, LSOC, LDVG, LUG             | #FF6B6B |
-| Écologistes    | LECO, LVEC                        | #2ECC71 |
-| Centre         | LDVC, LHOR, LMDM, LREN, LUC, LUDI | #F39C12 |
-| Droite         | LDVD, LLR, LUD, LUDR              | #3498DB |
-| Extrême Droite | LEXD, LRN, LREC, LUXD             | #1A1A2E |
-| Régionalistes  | LREG                              | #9B59B6 |
-| Divers         | DIV, LDIV, LDSV                   | #95A5A6 |
+Source : [Référentiel officiel du Ministère de l'Intérieur](https://www.resultats-elections.interieur.gouv.fr/municipales2026/referentiel.html)
+
+| Bloc           | Nuances                                    | Couleur |
+| -------------- | ------------------------------------------ | ------- |
+| Extrême Gauche | LEXG, LFI                                  | #BB0000 |
+| Gauche         | LCOM, LSOC, LVEC, LUG, LDVG, LECO, LREG    | #FF6B6B |
+| Centre         | LREN, LMDM, LHOR, LUDI, LUC, LDVC          | #F39C12 |
+| Droite         | LLR, LUD, LDVD, LDSV, LUDR                 | #3498DB |
+| Extrême Droite | LRN, LREC, LUXD, LEXD                      | #1A1A2E |
+| Divers         | LDIV                                       | #95A5A6 |
 
 ## Licence
 

@@ -29,28 +29,38 @@ def compute_marker_size(population: pd.Series) -> np.ndarray:
 
 
 def prepare_data_json(df: pd.DataFrame) -> str:
-    """Convertit le DataFrame en JSON pour ECharts (arrays parallèles)."""
-    sizes = compute_marker_size(df["population"])
+    """Convertit le DataFrame en JSON pour ECharts (arrays parallèles avec indices)."""
+
+    # Créer des lookup tables pour les valeurs répétitives
+    blocs = liste_blocs()
+    regions = sorted(df["region"].unique().tolist())
+    departements = sorted(df["departement"].unique().tolist())
+    nuances = sorted(df["nuance"].unique().tolist())
+
+    # Créer les mappings inversés
+    bloc_idx = {b: i for i, b in enumerate(blocs)}
+    region_idx = {r: i for i, r in enumerate(regions)}
+    dept_idx = {d: i for i, d in enumerate(departements)}
+    nuance_idx = {n: i for i, n in enumerate(nuances)}
 
     data = {
-        "communes": {
-            "lon": df["lon"].round(4).tolist(),
-            "lat": df["lat"].round(4).tolist(),
-            "nom": df["nom"].tolist(),
-            "maire": df["maire"].tolist(),
-            "nuance": df["nuance"].tolist(),
-            "bloc": df["bloc"].tolist(),
-            "couleur": df["couleur"].tolist(),
-            "tour": df["tour"].astype(int).tolist(),
-            "population": df["population"].astype(int).tolist(),
-            "departement": df["departement"].tolist(),
-            "region": df["region"].tolist(),
-            "size": sizes.astype(int).tolist(),
+        "c": {  # communes (noms courts pour réduire la taille)
+            "x": df["lon"].round(3).tolist(),  # 3 décimales suffisent (~100m de précision)
+            "y": df["lat"].round(3).tolist(),
+            "n": df["nom"].tolist(),  # nom
+            "m": df["maire"].tolist(),  # maire
+            "u": df["nuance"].map(nuance_idx).tolist(),  # nuance (index)
+            "b": df["bloc"].map(bloc_idx).tolist(),  # bloc (index)
+            "t": df["tour"].astype(int).tolist(),  # tour
+            "p": df["population"].astype(int).tolist(),  # population
+            "d": df["departement"].map(dept_idx).tolist(),  # département (index)
+            "r": df["region"].map(region_idx).tolist(),  # région (index)
         },
-        "filters": {
-            "blocs": liste_blocs(),
-            "regions": sorted(df["region"].unique().tolist()),
-            "departements": sorted(df["departement"].unique().tolist()),
+        "idx": {  # lookup tables
+            "blocs": blocs,
+            "regions": regions,
+            "departements": departements,
+            "nuances": nuances,
         },
         "blocCouleurs": BLOC_COULEURS,
     }
@@ -59,7 +69,7 @@ def prepare_data_json(df: pd.DataFrame) -> str:
 
 
 def generate_filter_html(df: pd.DataFrame) -> str:
-    """Génère les <select> HTML pour les filtres."""
+    """Génère les <select> HTML pour les filtres (utilise les données du JSON)."""
     blocs = liste_blocs()
     regions = sorted(df["region"].unique().tolist())
     departements = sorted(df["departement"].unique().tolist())
@@ -123,27 +133,40 @@ ECHART_JS = """
     const pieCommunes = echarts.init(document.getElementById('pie-communes'));
     const piePopulation = echarts.init(document.getElementById('pie-population'));
 
+    // Alias pour accès rapide
+    const C = DATA.c;  // communes
+    const IDX = DATA.idx;  // lookup tables
+    const N = C.x.length;
+
+    // Pré-calculer les index de filtres
+    const blocIdxMap = Object.fromEntries(IDX.blocs.map((b, i) => [b, i]));
+    const regionIdxMap = Object.fromEntries(IDX.regions.map((r, i) => [r, i]));
+    const deptIdxMap = Object.fromEntries(IDX.departements.map((d, i) => [d, i]));
+
     function getFilteredIndices() {
-        const bloc = document.getElementById('filter-bloc').value;
-        const tour = document.getElementById('filter-tour').value;
-        const taille = document.getElementById('filter-taille').value;
-        const region = document.getElementById('filter-region').value;
-        const dept = document.getElementById('filter-dept').value;
+        const blocFilter = document.getElementById('filter-bloc').value;
+        const tourFilter = document.getElementById('filter-tour').value;
+        const tailleFilter = document.getElementById('filter-taille').value;
+        const regionFilter = document.getElementById('filter-region').value;
+        const deptFilter = document.getElementById('filter-dept').value;
+
+        // Convertir les filtres en indices
+        const blocIdx = blocFilter ? blocIdxMap[blocFilter] : -1;
+        const regionIdx = regionFilter ? regionIdxMap[regionFilter] : -1;
+        const deptIdx = deptFilter ? deptIdxMap[deptFilter] : -1;
+        const tourVal = tourFilter ? parseInt(tourFilter) : 0;
 
         const indices = [];
-        const c = DATA.communes;
-        const n = c.lon.length;
-
-        for (let i = 0; i < n; i++) {
-            if (bloc && c.bloc[i] !== bloc) continue;
-            if (tour && c.tour[i] !== parseInt(tour)) continue;
-            if (region && c.region[i] !== region) continue;
-            if (dept && c.departement[i] !== dept) continue;
-            if (taille) {
-                const pop = c.population[i];
-                if (taille === 'small' && pop >= 5000) continue;
-                if (taille === 'medium' && (pop < 5000 || pop >= 50000)) continue;
-                if (taille === 'large' && pop < 50000) continue;
+        for (let i = 0; i < N; i++) {
+            if (blocIdx >= 0 && C.b[i] !== blocIdx) continue;
+            if (tourVal && C.t[i] !== tourVal) continue;
+            if (regionIdx >= 0 && C.r[i] !== regionIdx) continue;
+            if (deptIdx >= 0 && C.d[i] !== deptIdx) continue;
+            if (tailleFilter) {
+                const pop = C.p[i];
+                if (tailleFilter === 'small' && pop >= 5000) continue;
+                if (tailleFilter === 'medium' && (pop < 5000 || pop >= 50000)) continue;
+                if (tailleFilter === 'large' && pop < 50000) continue;
             }
             indices.push(i);
         }
@@ -151,15 +174,13 @@ ECHART_JS = """
     }
 
     function buildPieData(indices, byPopulation) {
-        const counts = {};
-        const c = DATA.communes;
+        const counts = new Array(IDX.blocs.length).fill(0);
         for (const i of indices) {
-            const b = c.bloc[i];
-            counts[b] = (counts[b] || 0) + (byPopulation ? c.population[i] : 1);
+            counts[C.b[i]] += byPopulation ? C.p[i] : 1;
         }
-        return DATA.filters.blocs
-            .filter(b => counts[b])
-            .map(b => ({ name: b, value: counts[b], itemStyle: { color: DATA.blocCouleurs[b] } }));
+        return IDX.blocs
+            .map((b, idx) => ({ name: b, value: counts[idx], itemStyle: { color: DATA.blocCouleurs[b] } }))
+            .filter(d => d.value > 0);
     }
 
     const SIZES = [
@@ -176,22 +197,22 @@ ECHART_JS = """
 
     function updateCharts() {
         const indices = getFilteredIndices();
-        const c = DATA.communes;
 
         // Group by bloc + size (8 blocs × 3 sizes = 24 series)
         const groups = {};
         for (const i of indices) {
-            const b = c.bloc[i];
-            const sz = getSizeKey(c.population[i]);
-            const key = b + '|' + sz;
+            const blocIdx = C.b[i];
+            const sz = getSizeKey(C.p[i]);
+            const key = blocIdx + '|' + sz;
             if (!groups[key]) groups[key] = [];
-            groups[key].push({ value: [c.lon[i], c.lat[i]], _idx: i });
+            groups[key].push({ value: [C.x[i], C.y[i]], _idx: i });
         }
 
         const series = [];
-        for (const b of DATA.filters.blocs) {
+        for (let bIdx = 0; bIdx < IDX.blocs.length; bIdx++) {
+            const b = IDX.blocs[bIdx];
             for (const s of SIZES) {
-                const key = b + '|' + s.key;
+                const key = bIdx + '|' + s.key;
                 series.push({
                     type: 'scatter',
                     coordinateSystem: 'geo',
@@ -238,13 +259,12 @@ ECHART_JS = """
             formatter: function(p) {
                 if (!p.data || p.data._idx === undefined) return '';
                 const i = p.data._idx;
-                const c = DATA.communes;
-                return '<b>' + c.nom[i] + '</b><br>'
-                    + c.departement[i] + ' (' + c.region[i] + ')<br>'
-                    + 'Maire: ' + c.maire[i] + '<br>'
-                    + 'Nuance: ' + c.nuance[i] + ' (' + c.bloc[i] + ')<br>'
-                    + 'Population: ' + c.population[i].toLocaleString('fr-FR') + '<br>'
-                    + 'Tour: ' + c.tour[i];
+                return '<b>' + C.n[i] + '</b><br>'
+                    + IDX.departements[C.d[i]] + ' (' + IDX.regions[C.r[i]] + ')<br>'
+                    + 'Maire: ' + C.m[i] + '<br>'
+                    + 'Nuance: ' + IDX.nuances[C.u[i]] + ' (' + IDX.blocs[C.b[i]] + ')<br>'
+                    + 'Population: ' + C.p[i].toLocaleString('fr-FR') + '<br>'
+                    + 'Tour: ' + C.t[i];
             }
         },
         geo: {
