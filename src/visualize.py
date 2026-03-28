@@ -162,21 +162,48 @@ ECHART_JS = """
             .map(b => ({ name: b, value: counts[b], itemStyle: { color: DATA.blocCouleurs[b] } }));
     }
 
+    const SIZES = [
+        { key: 'small', size: 4 },
+        { key: 'medium', size: 10 },
+        { key: 'large', size: 18 },
+    ];
+
+    function getSizeKey(pop) {
+        if (pop < 5000) return 'small';
+        if (pop < 50000) return 'medium';
+        return 'large';
+    }
+
     function updateCharts() {
         const indices = getFilteredIndices();
         const c = DATA.communes;
 
-        // Scatter data
-        const scatterData = indices.map(i => ({
-            value: [c.lon[i], c.lat[i]],
-            symbolSize: c.size[i],
-            itemStyle: { color: c.couleur[i] },
-            _idx: i,
-        }));
+        // Group by bloc + size (8 blocs × 3 sizes = 24 series)
+        const groups = {};
+        for (const i of indices) {
+            const b = c.bloc[i];
+            const sz = getSizeKey(c.population[i]);
+            const key = b + '|' + sz;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push({ value: [c.lon[i], c.lat[i]], _idx: i });
+        }
 
-        mapChart.setOption({
-            series: [{ data: scatterData }]
-        });
+        const series = [];
+        for (const b of DATA.filters.blocs) {
+            for (const s of SIZES) {
+                const key = b + '|' + s.key;
+                series.push({
+                    type: 'scatter',
+                    coordinateSystem: 'geo',
+                    name: b,
+                    symbolSize: s.size,
+                    itemStyle: { color: DATA.blocCouleurs[b], opacity: VIZCONFIG.opacity },
+                    data: groups[key] || [],
+                });
+            }
+        }
+
+        mapChart.setOption({ series }, { replaceMerge: ['series'] });
 
         // Pies
         const pieDataCommunes = buildPieData(indices, false);
@@ -229,11 +256,7 @@ ECHART_JS = """
             emphasis: { itemStyle: { areaColor: getGeoStyle().emphasis.areaColor } },
             label: { show: false },
         },
-        series: [{
-            type: 'scatter',
-            coordinateSystem: 'geo',
-            data: [],
-        }]
+        series: []
     });
 
     // Pie options (shared)
