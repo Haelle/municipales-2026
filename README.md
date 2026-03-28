@@ -135,16 +135,16 @@ Le dossier `docs/` est configuré pour être servi par GitHub Pages :
 
 ## Mapping des nuances politiques
 
-Source : [Référentiel officiel du Ministère de l'Intérieur](https://www.resultats-elections.interieur.gouv.fr/municipales2026/referentiel.html)
+Source : [Circulaire MI du 2 février 2026 - Annexe 3](https://www.legifrance.gouv.fr/circulaire/id/45645)
 
-| Bloc           | Nuances                                    | Couleur |
-| -------------- | ------------------------------------------ | ------- |
-| Extrême Gauche | LEXG, LFI                                  | #BB0000 |
-| Gauche         | LCOM, LSOC, LVEC, LUG, LDVG, LECO, LREG    | #FF6B6B |
-| Centre         | LREN, LMDM, LHOR, LUDI, LUC, LDVC          | #F39C12 |
-| Droite         | LLR, LUD, LDVD, LDSV, LUDR                 | #3498DB |
-| Extrême Droite | LRN, LREC, LUXD, LEXD                      | #1A1A2E |
-| Divers         | LDIV                                       | #95A5A6 |
+| Bloc           | Nuances                         | Couleur |
+| -------------- | ------------------------------- | ------- |
+| Extrême Gauche | LEXG, LFI                       | #BB0000 |
+| Gauche         | LCOM, LSOC, LVEC, LUG, LDVG     | #FF6B6B |
+| Divers         | LECO, LREG, LDIV                | #95A5A6 |
+| Centre         | LREN, LMDM, LHOR, LUDI, LUC, LDVC | #F39C12 |
+| Droite         | LLR, LUD, LDVD, LDSV, LUDR      | #3498DB |
+| Extrême Droite | LRN, LREC, LUXD, LEXD           | #1A1A2E |
 
 ## Licence
 

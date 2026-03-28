@@ -1,16 +1,20 @@
 """Mapping des nuances politiques vers les blocs et couleurs."""
 
 # Définition des blocs politiques avec leurs nuances et couleurs
-# Source: Circulaire MI - Légifrance https://www.legifrance.gouv.fr/circulaire/id/45645
-# Référentiel: https://www.resultats-elections.interieur.gouv.fr/municipales2026/referentiel.html
+# Source: Circulaire MI du 2 février 2026 - Annexe 3, page 12
+# https://www.legifrance.gouv.fr/circulaire/id/45645
 BLOCS = {
     "Extrême Gauche": {
         "nuances": ["LEXG", "LFI"],
         "couleur": "#BB0000",
     },
     "Gauche": {
-        "nuances": ["LCOM", "LSOC", "LVEC", "LUG", "LDVG", "LECO", "LREG"],
+        "nuances": ["LCOM", "LSOC", "LVEC", "LUG", "LDVG"],
         "couleur": "#FF6B6B",
+    },
+    "Divers": {
+        "nuances": ["LECO", "LREG", "LDIV"],
+        "couleur": "#95A5A6",
     },
     "Centre": {
         "nuances": ["LREN", "LMDM", "LHOR", "LUDI", "LUC", "LDVC"],
@@ -24,14 +28,11 @@ BLOCS = {
         "nuances": ["LRN", "LREC", "LUXD", "LEXD"],
         "couleur": "#1A1A2E",
     },
-    "Divers": {
-        "nuances": ["LDIV", "DIV"],
-        "couleur": "#95A5A6",
-    },
 }
 
 # Tableau récapitulatif pour documentation
-# Source: Référentiel MI https://www.resultats-elections.interieur.gouv.fr/municipales2026/referentiel.html
+# Source: Circulaire MI du 2 février 2026 - Annexes 2 et 3
+# https://www.legifrance.gouv.fr/circulaire/id/45645
 NUANCES_TABLE = """
 | Code  | Signification                         | Bloc           |
 |-------|---------------------------------------|----------------|
@@ -42,8 +43,9 @@ NUANCES_TABLE = """
 | LVEC  | Liste Les Écologistes                 | Gauche         |
 | LUG   | Liste d'union à gauche                | Gauche         |
 | LDVG  | Liste divers gauche                   | Gauche         |
-| LECO  | Liste écologiste                      | Gauche         |
-| LREG  | Liste régionaliste                    | Gauche         |
+| LECO  | Liste écologiste                      | Divers         |
+| LREG  | Liste régionaliste                    | Divers         |
+| LDIV  | Liste Divers                          | Divers         |
 | LREN  | Liste Renaissance                     | Centre         |
 | LMDM  | Liste Mouvement démocrate (MoDem)     | Centre         |
 | LHOR  | Liste Horizons                        | Centre         |
@@ -59,7 +61,6 @@ NUANCES_TABLE = """
 | LREC  | Liste Reconquête !                    | Extrême Droite |
 | LUXD  | Liste d'union à l'extrême-droite      | Extrême Droite |
 | LEXD  | Liste d'extrême droite                | Extrême Droite |
-| LDIV  | Liste Divers                          | Divers         |
 """
 
 # Couleur par défaut pour les nuances inconnues
