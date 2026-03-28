@@ -27,6 +27,8 @@ URLS = {
     "departements": "https://geo.api.gouv.fr/departements?fields=code,nom,codeRegion",
     # Liste des régions
     "regions": "https://geo.api.gouv.fr/regions?fields=code,nom",
+    # GeoJSON simplifié des départements français
+    "france_geo": "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-version-simplifiee.geojson",
 }
 
 # Fichiers de sortie
@@ -40,6 +42,7 @@ OUTPUT_FILES = {
     "departements": RAW_DIR / "departements.json",
     "regions": RAW_DIR / "regions.json",
     "processed": PROCESSED_DIR / "resultats_complets.csv",
+    "france_geo": RAW_DIR / "france_departements.geojson",
     "html": DOCS_DIR / "index.html",
 }
 
@@ -58,10 +61,7 @@ RESULT_COLUMNS = {
 
 # Configuration de la visualisation
 VIZ_CONFIG = {
-    "map_style": "carto-positron",
     "map_center": {"lat": 46.603354, "lon": 1.888334},  # Centre de la France
     "map_zoom": 5,
-    "point_size_min": 3,
-    "point_size_max": 30,
     "point_opacity": 0.7,
 }

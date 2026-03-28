@@ -118,6 +118,13 @@ def download_all() -> dict[str, bool]:
         "régions"
     )
 
+    # GeoJSON France (départements)
+    results["france_geo"] = download_file(
+        URLS["france_geo"],
+        OUTPUT_FILES["france_geo"],
+        "GeoJSON départements France"
+    )
+
     # Ajouter les arrondissements au fichier geo
     if results["communes_geo"]:
         add_arrondissements_to_geo(OUTPUT_FILES["communes_geo"])
@@ -166,7 +173,7 @@ def check_local_files() -> dict[str, bool]:
     return {
         name: path.exists()
         for name, path in OUTPUT_FILES.items()
-        if name in ["resultats_t1", "resultats_t2", "population", "communes_geo"]
+        if name in ["resultats_t1", "resultats_t2", "population", "communes_geo", "france_geo"]
     }
 
 

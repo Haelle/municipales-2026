@@ -1,17 +1,15 @@
-"""Génération des visualisations Plotly."""
+"""Génération de la visualisation ECharts."""
 
+import json
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import DOCS_DIR, VIZ_CONFIG
-from src.colors import BLOC_COULEURS, liste_blocs
-
+from config import DOCS_DIR, OUTPUT_FILES, VIZ_CONFIG
+from src.colors import BLOC_COULEURS, BLOCS, liste_blocs
 
 # Catégories de taille de commune
 SIZE_CATEGORIES = {
@@ -24,267 +22,307 @@ SIZE_CATEGORIES = {
 def compute_marker_size(population: pd.Series) -> np.ndarray:
     """Calcule la taille des marqueurs selon 3 catégories."""
     sizes = np.zeros(len(population))
-    sizes[population < 5000] = 5
-    sizes[(population >= 5000) & (population < 50000)] = 10
-    sizes[population >= 50000] = 20
+    sizes[population < 5000] = 3
+    sizes[(population >= 5000) & (population < 50000)] = 8
+    sizes[population >= 50000] = 16
     return sizes
 
 
-def compute_pie_data(df_filtered: pd.DataFrame, by_population: bool = False) -> tuple[list, list, list]:
-    """Calcule les données du camembert."""
-    if by_population:
-        bloc_data = df_filtered.groupby("bloc")["population"].sum()
-    else:
-        bloc_data = df_filtered["bloc"].value_counts()
+def prepare_data_json(df: pd.DataFrame) -> str:
+    """Convertit le DataFrame en JSON pour ECharts (arrays parallèles)."""
+    sizes = compute_marker_size(df["population"])
 
-    blocs_ordre = [b for b in liste_blocs() if b in bloc_data.index]
-    bloc_data = bloc_data[blocs_ordre]
+    data = {
+        "communes": {
+            "lon": df["lon"].round(4).tolist(),
+            "lat": df["lat"].round(4).tolist(),
+            "nom": df["nom"].tolist(),
+            "maire": df["maire"].tolist(),
+            "nuance": df["nuance"].tolist(),
+            "bloc": df["bloc"].tolist(),
+            "couleur": df["couleur"].tolist(),
+            "tour": df["tour"].astype(int).tolist(),
+            "population": df["population"].astype(int).tolist(),
+            "departement": df["departement"].tolist(),
+            "region": df["region"].tolist(),
+            "size": sizes.astype(int).tolist(),
+        },
+        "filters": {
+            "blocs": liste_blocs(),
+            "regions": sorted(df["region"].unique().tolist()),
+            "departements": sorted(df["departement"].unique().tolist()),
+        },
+        "blocCouleurs": BLOC_COULEURS,
+    }
 
-    labels = list(bloc_data.index)
-    values = [int(v) for v in bloc_data.values]
-    colors = [BLOC_COULEURS[b] for b in labels]
-
-    return labels, values, colors
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
 
 
-def create_hover_text(row: pd.Series) -> str:
-    """Crée le texte de survol pour un point."""
-    return (f"<b>{row['nom']}</b><br>"
-            f"{row['departement']} ({row['region']})<br>"
-            f"Maire: {row['maire']}<br>"
-            f"Nuance: {row['nuance']} ({row['bloc']})<br>"
-            f"Population: {row['population']:,}<br>"
-            f"Tour: {row['tour']}")
+def generate_filter_html(df: pd.DataFrame) -> str:
+    """Génère les <select> HTML pour les filtres."""
+    blocs = liste_blocs()
+    regions = sorted(df["region"].unique().tolist())
+    departements = sorted(df["departement"].unique().tolist())
 
+    def options(items, all_label="Tous"):
+        opts = f'<option value="">{all_label}</option>\n'
+        for item in items:
+            opts += f'                        <option value="{item}">{item}</option>\n'
+        return opts
 
-def create_visualization(df: pd.DataFrame) -> go.Figure:
-    """Crée la visualisation complète avec carte et camemberts."""
-
-    marker_sizes = compute_marker_size(df["population"])
-
-    # Créer la figure avec subplots: carte + 2 camemberts
-    fig = make_subplots(
-        rows=2, cols=2,
-        row_heights=[0.5, 0.5],
-        column_widths=[0.72, 0.28],
-        specs=[
-            [{"type": "map", "rowspan": 2}, {"type": "pie"}],
-            [None, {"type": "pie"}]
-        ],
-        vertical_spacing=0.08,
-        horizontal_spacing=0.02,
-        subplot_titles=("", "Par nombre de communes", "Par population")
+    select_class = (
+        "block w-full rounded-lg border border-border/50 bg-card px-3 py-2 text-sm "
+        "shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 "
+        "dark:bg-gray-800 dark:border-gray-700"
     )
 
-    # === CARTE (trace 0) ===
-    fig.add_trace(
-        go.Scattermap(
-            lat=df["lat"],
-            lon=df["lon"],
-            mode="markers",
-            marker=dict(
-                size=marker_sizes,
-                color=df["couleur"],
-                opacity=VIZ_CONFIG["point_opacity"],
-            ),
-            text=df.apply(create_hover_text, axis=1),
-            hoverinfo="text",
-            name="Communes",
-        ),
-        row=1, col=1
-    )
+    return f"""
+        <div class="flex flex-wrap gap-4 mb-4">
+            <label class="flex flex-col gap-1 text-sm font-medium text-muted-foreground">
+                <span>Bloc</span>
+                <select id="filter-bloc" class="{select_class}" onchange="updateCharts()">
+                    {options(blocs)}
+                </select>
+            </label>
+            <label class="flex flex-col gap-1 text-sm font-medium text-muted-foreground">
+                <span>Tour</span>
+                <select id="filter-tour" class="{select_class}" onchange="updateCharts()">
+                    <option value="">Tous</option>
+                    <option value="1">1er tour</option>
+                    <option value="2">2nd tour</option>
+                </select>
+            </label>
+            <label class="flex flex-col gap-1 text-sm font-medium text-muted-foreground">
+                <span>Taille</span>
+                <select id="filter-taille" class="{select_class}" onchange="updateCharts()">
+                    <option value="">Toutes</option>
+                    <option value="small">&lt; 5 000 hab.</option>
+                    <option value="medium">5k - 50k hab.</option>
+                    <option value="large">&gt; 50 000 hab.</option>
+                </select>
+            </label>
+            <label class="flex flex-col gap-1 text-sm font-medium text-muted-foreground">
+                <span>Région</span>
+                <select id="filter-region" class="{select_class}" onchange="updateCharts()">
+                    {options(regions, "Toutes")}
+                </select>
+            </label>
+            <label class="flex flex-col gap-1 text-sm font-medium text-muted-foreground">
+                <span>Département</span>
+                <select id="filter-dept" class="{select_class}" onchange="updateCharts()">
+                    {options(departements)}
+                </select>
+            </label>
+        </div>"""
 
-    # === CAMEMBERT COMMUNES (trace 1) ===
-    labels_c, values_c, colors_c = compute_pie_data(df, by_population=False)
-    total_communes = sum(values_c)
 
-    fig.add_trace(
-        go.Pie(
-            labels=labels_c,
-            values=values_c,
-            marker=dict(colors=colors_c),
-            textinfo="percent",
-            textposition="inside",
-            hovertemplate="<b>%{label}</b><br>%{value:,} communes<br>%{percent}<extra></extra>",
-            name="Communes",
-            title=dict(text=f"<b>{total_communes:,} communes</b>", position="top center", font=dict(size=12)),
-        ),
-        row=1, col=2
-    )
+ECHART_JS = """
+    echarts.registerMap('france', FRANCE_GEO);
 
-    # === CAMEMBERT POPULATION (trace 2) ===
-    labels_p, values_p, colors_p = compute_pie_data(df, by_population=True)
-    total_pop = sum(values_p)
+    const mapChart = echarts.init(document.getElementById('map-chart'));
+    const pieCommunes = echarts.init(document.getElementById('pie-communes'));
+    const piePopulation = echarts.init(document.getElementById('pie-population'));
 
-    fig.add_trace(
-        go.Pie(
-            labels=labels_p,
-            values=values_p,
-            marker=dict(colors=colors_p),
-            textinfo="percent",
-            textposition="inside",
-            hovertemplate="<b>%{label}</b><br>%{value:,} habitants<br>%{percent}<extra></extra>",
-            name="Population",
-            title=dict(text=f"<b>{total_pop:,} hab.</b>", position="top center", font=dict(size=12)),
-        ),
-        row=2, col=2
-    )
+    function getFilteredIndices() {
+        const bloc = document.getElementById('filter-bloc').value;
+        const tour = document.getElementById('filter-tour').value;
+        const taille = document.getElementById('filter-taille').value;
+        const region = document.getElementById('filter-region').value;
+        const dept = document.getElementById('filter-dept').value;
 
-    # === FILTRES INTERACTIFS ===
-    blocs_list = ["Tous"] + liste_blocs()
-    tours_list = ["Tous", "1er tour", "2nd tour"]
-    tailles_list = ["Toutes", "Petites (< 5k)", "Moyennes (5k-50k)", "Grandes (> 50k)"]
+        const indices = [];
+        const c = DATA.communes;
+        const n = c.lon.length;
 
-    # Régions et départements triés
-    regions_list = ["Toutes"] + sorted(df["region"].unique().tolist())
-    departements_list = ["Tous"] + sorted(df["departement"].unique().tolist())
+        for (let i = 0; i < n; i++) {
+            if (bloc && c.bloc[i] !== bloc) continue;
+            if (tour && c.tour[i] !== parseInt(tour)) continue;
+            if (region && c.region[i] !== region) continue;
+            if (dept && c.departement[i] !== dept) continue;
+            if (taille) {
+                const pop = c.population[i];
+                if (taille === 'small' && pop >= 5000) continue;
+                if (taille === 'medium' && (pop < 5000 || pop >= 50000)) continue;
+                if (taille === 'large' && pop < 50000) continue;
+            }
+            indices.push(i);
+        }
+        return indices;
+    }
 
-    def create_filter_args(mask):
-        """Crée les arguments pour mettre à jour les 3 traces."""
-        df_filtered = df.loc[mask]
-        filtered_sizes = marker_sizes[mask]
+    function buildPieData(indices, byPopulation) {
+        const counts = {};
+        const c = DATA.communes;
+        for (const i of indices) {
+            const b = c.bloc[i];
+            counts[b] = (counts[b] || 0) + (byPopulation ? c.population[i] : 1);
+        }
+        return DATA.filters.blocs
+            .filter(b => counts[b])
+            .map(b => ({ name: b, value: counts[b], itemStyle: { color: DATA.blocCouleurs[b] } }));
+    }
 
-        # Camembert communes
-        pie_c_labels, pie_c_values, pie_c_colors = compute_pie_data(df_filtered, by_population=False)
-        pie_c_total = sum(pie_c_values)
+    function updateCharts() {
+        const indices = getFilteredIndices();
+        const c = DATA.communes;
 
-        # Camembert population
-        pie_p_labels, pie_p_values, pie_p_colors = compute_pie_data(df_filtered, by_population=True)
-        pie_p_total = sum(pie_p_values)
+        // Scatter data
+        const scatterData = indices.map(i => ({
+            value: [c.lon[i], c.lat[i]],
+            symbolSize: c.size[i],
+            itemStyle: { color: c.couleur[i] },
+            _idx: i,
+        }));
 
-        return [
-            {
-                "lat": [df_filtered["lat"].tolist(), None, None],
-                "lon": [df_filtered["lon"].tolist(), None, None],
-                "marker.size": [filtered_sizes.tolist(), None, None],
-                "marker.color": [df_filtered["couleur"].tolist(), None, None],
-                "marker.colors": [None, pie_c_colors, pie_p_colors],
-                "text": [df_filtered.apply(create_hover_text, axis=1).tolist(), None, None],
-                "labels": [None, pie_c_labels, pie_p_labels],
-                "values": [None, pie_c_values, pie_p_values],
-                "title.text": [None, f"<b>{pie_c_total:,} communes</b>", f"<b>{pie_p_total:,} hab.</b>"],
+        mapChart.setOption({
+            series: [{ data: scatterData }]
+        });
+
+        // Pies
+        const pieDataCommunes = buildPieData(indices, false);
+        const totalCommunes = pieDataCommunes.reduce((s, d) => s + d.value, 0);
+        pieCommunes.setOption({
+            title: { text: totalCommunes.toLocaleString('fr-FR') + ' communes' },
+            series: [{ data: pieDataCommunes }]
+        });
+
+        const pieDataPop = buildPieData(indices, true);
+        const totalPop = pieDataPop.reduce((s, d) => s + d.value, 0);
+        piePopulation.setOption({
+            title: { text: totalPop.toLocaleString('fr-FR') + ' hab.' },
+            series: [{ data: pieDataPop }]
+        });
+    }
+
+    // Dark mode colors
+    const geoLight = { areaColor: '#f3f4f6', borderColor: '#d1d5db', emphasis: { areaColor: '#e5e7eb' } };
+    const geoDark = { areaColor: '#1f2937', borderColor: '#374151', emphasis: { areaColor: '#374151' } };
+
+    function isDark() { return document.documentElement.classList.contains('dark'); }
+
+    function getGeoStyle() { return isDark() ? geoDark : geoLight; }
+    function getTextColor() { return isDark() ? '#e5e7eb' : '#374151'; }
+
+    // Map options
+    mapChart.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {
+            trigger: 'item',
+            formatter: function(p) {
+                if (!p.data || p.data._idx === undefined) return '';
+                const i = p.data._idx;
+                const c = DATA.communes;
+                return '<b>' + c.nom[i] + '</b><br>'
+                    + c.departement[i] + ' (' + c.region[i] + ')<br>'
+                    + 'Maire: ' + c.maire[i] + '<br>'
+                    + 'Nuance: ' + c.nuance[i] + ' (' + c.bloc[i] + ')<br>'
+                    + 'Population: ' + c.population[i].toLocaleString('fr-FR') + '<br>'
+                    + 'Tour: ' + c.tour[i];
+            }
+        },
+        geo: {
+            map: 'france',
+            roam: true,
+            zoom: VIZCONFIG.zoom,
+            center: [VIZCONFIG.center.lon, VIZCONFIG.center.lat],
+            itemStyle: getGeoStyle(),
+            emphasis: { itemStyle: { areaColor: getGeoStyle().emphasis.areaColor } },
+            label: { show: false },
+        },
+        series: [{
+            type: 'scatter',
+            coordinateSystem: 'geo',
+            data: [],
+        }]
+    });
+
+    // Pie options (shared)
+    function pieOption(title) {
+        return {
+            backgroundColor: 'transparent',
+            title: {
+                text: title,
+                left: 'center', top: 10,
+                textStyle: { fontSize: 13, fontWeight: 600, color: getTextColor() }
             },
-            [0, 1, 2]
-        ]
+            tooltip: {
+                trigger: 'item',
+                formatter: '{b}: {c} ({d}%)'
+            },
+            series: [{
+                type: 'pie',
+                radius: ['30%', '70%'],
+                center: ['50%', '55%'],
+                label: { show: false },
+                emphasis: {
+                    label: { show: true, fontWeight: 'bold' }
+                },
+                data: [],
+            }]
+        };
+    }
 
-    # Boutons Bloc
-    bloc_buttons = []
-    for bloc in blocs_list:
-        mask = pd.Series([True] * len(df), index=df.index) if bloc == "Tous" else df["bloc"] == bloc
-        bloc_buttons.append(dict(args=create_filter_args(mask), label=bloc, method="restyle"))
+    pieCommunes.setOption(pieOption(''));
+    piePopulation.setOption(pieOption(''));
 
-    # Boutons Tour
-    tour_buttons = []
-    for tour in tours_list:
-        if tour == "Tous":
-            mask = pd.Series([True] * len(df), index=df.index)
-        elif tour == "1er tour":
-            mask = df["tour"] == 1
-        else:
-            mask = df["tour"] == 2
-        tour_buttons.append(dict(args=create_filter_args(mask), label=tour, method="restyle"))
+    // Initial render
+    updateCharts();
 
-    # Boutons Taille
-    taille_buttons = []
-    for taille in tailles_list:
-        if taille == "Toutes":
-            mask = pd.Series([True] * len(df), index=df.index)
-        elif taille == "Petites (< 5k)":
-            mask = df["population"] < 5000
-        elif taille == "Moyennes (5k-50k)":
-            mask = (df["population"] >= 5000) & (df["population"] < 50000)
-        else:
-            mask = df["population"] >= 50000
-        taille_buttons.append(dict(args=create_filter_args(mask), label=taille, method="restyle"))
+    // Resize
+    window.addEventListener('resize', () => {
+        mapChart.resize();
+        pieCommunes.resize();
+        piePopulation.resize();
+    });
 
-    # Boutons Région
-    region_buttons = []
-    for region in regions_list:
-        mask = pd.Series([True] * len(df), index=df.index) if region == "Toutes" else df["region"] == region
-        region_buttons.append(dict(args=create_filter_args(mask), label=region, method="restyle"))
-
-    # Boutons Département
-    dept_buttons = []
-    for dept in departements_list:
-        mask = pd.Series([True] * len(df), index=df.index) if dept == "Tous" else df["departement"] == dept
-        dept_buttons.append(dict(args=create_filter_args(mask), label=dept, method="restyle"))
-
-    # === LAYOUT ===
-    fig.update_layout(
-        title=dict(
-            text="<b>Élections Municipales 2026</b> - Maires élus par commune",
-            x=0.5,
-            y=0.98,
-            font=dict(size=20),
-        ),
-        showlegend=False,
-
-        map=dict(
-            style=VIZ_CONFIG["map_style"],
-            center=VIZ_CONFIG["map_center"],
-            zoom=VIZ_CONFIG["map_zoom"],
-        ),
-
-        updatemenus=[
-            dict(
-                buttons=bloc_buttons, direction="down", showactive=True, active=0,
-                x=0.07, xanchor="left", y=0.99, yanchor="top",
-                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=10),
-            ),
-            dict(
-                buttons=tour_buttons, direction="down", showactive=True, active=0,
-                x=0.195, xanchor="left", y=0.99, yanchor="top",
-                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=10),
-            ),
-            dict(
-                buttons=taille_buttons, direction="down", showactive=True, active=0,
-                x=0.30, xanchor="left", y=0.99, yanchor="top",
-                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=10),
-            ),
-            dict(
-                buttons=region_buttons, direction="down", showactive=True, active=0,
-                x=0.44, xanchor="left", y=0.99, yanchor="top",
-                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=10),
-            ),
-            dict(
-                buttons=dept_buttons, direction="down", showactive=True, active=0,
-                x=0.58, xanchor="left", y=0.99, yanchor="top",
-                bgcolor="white", bordercolor="#666", borderwidth=1, font=dict(size=10),
-            ),
-        ],
-
-        annotations=[
-            dict(text="<b>Bloc</b>", x=0.0, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=10)),
-            dict(text="<b>Tour</b>", x=0.14, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=10)),
-            dict(text="<b>Taille</b>", x=0.255, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=10)),
-            dict(text="<b>Région</b>", x=0.385, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=10)),
-            dict(text="<b>Dépt.</b>", x=0.53, xref="paper", y=0.985, yref="paper", showarrow=False, font=dict(size=10)),
-        ],
-
-        margin=dict(l=10, r=10, t=50, b=10),
-        height=800,
-        autosize=True,
-    )
-
-    return fig
+    // Dark mode update for charts
+    const origToggle = window.toggleDark;
+    window.toggleDark = function() {
+        origToggle();
+        const style = getGeoStyle();
+        mapChart.setOption({
+            geo: { itemStyle: style, emphasis: { itemStyle: { areaColor: style.emphasis.areaColor } } }
+        });
+        pieCommunes.setOption({ title: { textStyle: { color: getTextColor() } } });
+        piePopulation.setOption({ title: { textStyle: { color: getTextColor() } } });
+    };
+"""
 
 
-def save_html(fig: go.Figure, output_path: Path | None = None) -> Path:
-    """Exporte la visualisation en HTML avec tableau des nuances."""
+def save_html(df: pd.DataFrame, output_path: Path | None = None) -> Path:
+    """Exporte la visualisation ECharts en HTML."""
     if output_path is None:
         output_path = DOCS_DIR / "index.html"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    config = {
-        "responsive": True,
-        "displayModeBar": True,
-        "modeBarButtonsToRemove": ["lasso2d", "select2d"],
-        "displaylogo": False,
-        "scrollZoom": True,
-    }
+    data_json = prepare_data_json(df)
 
-    plotly_html = fig.to_html(include_plotlyjs="cdn", full_html=False, config=config)
+    # Charger le GeoJSON France
+    geo_path = OUTPUT_FILES["france_geo"]
+    with open(geo_path, "r", encoding="utf-8") as f:
+        france_geo_json = f.read()
+
+    viz_config_json = json.dumps({
+        "center": VIZ_CONFIG["map_center"],
+        "zoom": VIZ_CONFIG["map_zoom"],
+        "opacity": VIZ_CONFIG["point_opacity"],
+    })
+
+    filter_html = generate_filter_html(df)
+
+    # Légende des blocs
+    legend_cards = ""
+    for bloc, config in BLOCS.items():
+        couleur = config["couleur"]
+        nuances_html = ""
+        for nuance in config["nuances"]:
+            nuances_html += f'<div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">{nuance}</div>\n'
+        legend_cards += f"""
+                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
+                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, {couleur} 0%, {couleur}cc 100%)">{bloc}</div>
+                    {nuances_html}
+                </div>"""
 
     full_html = f"""<!DOCTYPE html>
 <html lang="fr" class="light">
@@ -293,6 +331,7 @@ def save_html(fig: go.Figure, output_path: Path | None = None) -> Path:
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Élections Municipales 2026 - Carte interactive</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -381,10 +420,17 @@ def save_html(fig: go.Figure, output_path: Path | None = None) -> Path:
 
     <!-- Main content -->
     <main class="max-w-7xl mx-auto px-4 py-6">
-        <!-- Map container with shadow -->
+        <!-- Filters -->
+        {filter_html}
+
+        <!-- Charts container -->
         <div class="rounded-2xl overflow-hidden shadow-xl border border-border/50 bg-card">
-            <div id="plotly-container" class="w-full">
-                {plotly_html}
+            <div class="flex flex-col lg:flex-row">
+                <div id="map-chart" class="w-full lg:w-[72%]" style="height:700px"></div>
+                <div class="w-full lg:w-[28%] flex flex-col border-l border-border/50">
+                    <div id="pie-communes" class="flex-1" style="min-height:300px"></div>
+                    <div id="pie-population" class="flex-1 border-t border-border/50" style="min-height:300px"></div>
+                </div>
             </div>
         </div>
 
@@ -397,55 +443,7 @@ def save_html(fig: go.Figure, output_path: Path | None = None) -> Path:
             </div>
 
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 text-xs">
-                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
-                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #BB0000 0%, #8B0000 100%)">Extrême Gauche</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LEXG · Extrême Gauche</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LFI · France Insoumise</div>
-                </div>
-                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
-                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #FF6B6B 0%, #ee5a5a 100%)">Gauche</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LCOM · Communiste</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LSOC · Socialiste</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LDVG · Divers Gauche</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUG · Union Gauche</div>
-                </div>
-                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
-                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #2ECC71 0%, #27ae60 100%)">Écologistes</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LECO · Écologiste</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LVEC · Verts</div>
-                </div>
-                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
-                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #F39C12 0%, #d68910 100%)">Centre</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LDVC · Divers Centre</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LHOR · Horizons</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LMDM · MoDem</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LREN · Renaissance</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUC · Union Centre</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUDI · UDI</div>
-                </div>
-                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
-                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #3498DB 0%, #2980b9 100%)">Droite</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LDVD · Divers Droite</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LLR · Les Républicains</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUD · Union Droite</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUDR · Union DR/Centre</div>
-                </div>
-                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
-                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #1A1A2E 0%, #0f0f1a 100%)">Extrême Droite</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LEXD · Extrême Droite</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LRN · Rass. National</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LREC · Reconquête</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LUXD · Union Ext. DR</div>
-                </div>
-                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
-                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #9B59B6 0%, #8e44ad 100%)">Régionalistes</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LREG · Régionaliste</div>
-                </div>
-                <div class="rounded-xl border border-border/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow bg-card">
-                    <div class="px-3 py-2.5 font-semibold text-white" style="background: linear-gradient(135deg, #95A5A6 0%, #7f8c8d 100%)">Divers</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">DIV · Sans étiquette</div>
-                    <div class="px-3 py-1.5 border-t border-border/50 text-muted-foreground">LDIV · Liste Divers</div>
-                </div>
+                {legend_cards}
             </div>
 
             <!-- Size legend -->
@@ -489,6 +487,14 @@ def save_html(fig: go.Figure, output_path: Path | None = None) -> Path:
             document.getElementById('moonIcon').classList.toggle('hidden');
         }}
     </script>
+
+    <script>
+        const DATA = {data_json};
+        const FRANCE_GEO = {france_geo_json};
+        const VIZCONFIG = {viz_config_json};
+
+        {ECHART_JS}
+    </script>
 </body>
 </html>
 """
@@ -507,7 +513,6 @@ if __name__ == "__main__":
     df = process_data()
     print(f"  Données: {len(df)} communes\n")
 
-    fig = create_visualization(df)
-    save_html(fig)
+    save_html(df)
 
     print("\n=== Terminé ===")

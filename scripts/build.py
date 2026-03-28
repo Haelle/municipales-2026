@@ -11,7 +11,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from config import DOCS_DIR, OUTPUT_FILES
 from src.download import check_local_files, download_all
 from src.process import process_data, save_processed
-from src.visualize import create_visualization, save_html
+from src.visualize import save_html
 
 
 def main():
@@ -52,8 +52,7 @@ def main():
     print("ÉTAPE 3: Génération de la visualisation")
     print("-" * 40)
     print(f"  Création de la carte avec {len(df)} communes...")
-    fig = create_visualization(df)
-    output_path = save_html(fig)
+    output_path = save_html(df)
     print()
 
     # Résumé
